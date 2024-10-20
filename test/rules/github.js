@@ -1,32 +1,35 @@
 import process from 'node:process';
 import test from 'ava';
-import sinon from 'sinon';
+import esmock from 'esmock';
 import lint from '../_lint.js';
-import github from '../../rules/github.js';
 
 const config = {
 	plugins: [
-		github,
+		await esmock('../../rules/github.js'),
 	],
 };
 
-let sandbox;
+let github;
 
-test.beforeEach(() => {
-	sandbox = sinon.createSandbox();
+test.beforeEach(async () => {
+	github = await esmock('../../rules/github.js');
 });
 
-test.afterEach.always(() => {
-	sandbox.restore();
+test.afterEach.always(async () => {
+	await esmock.purge(github);
 });
 
+// Retaining .failing modifier for expected failures
 test.serial.failing('github - error invalid git repo', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async () => {
+				throw new Error('"git" command not found');
+			},
+		},
+	});
 
-	execaStub
-		.throws(new Error('"git" command not found'));
-
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -37,30 +40,33 @@ test.serial.failing('github - error invalid git repo', async t => {
 });
 
 test.serial.failing('github - repo without description and license', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
-
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.resolves({
-			body: {
-				description: null,
-				topics: ['awesome', 'awesome-list'],
-				license: null,
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
 			},
-		});
+		},
+		got: {
+			get: async () => ({
+				body: {
+					description: null,
+					topics: ['awesome', 'awesome-list'],
+					license: null,
+				},
+			}),
+		},
+	});
 
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
 			ruleId: 'awesome-github',
 			message: 'The repository should have a description',
-		}, {
+		},
+		{
 			line: null,
 			ruleId: 'awesome-github',
 			message: 'License was not detected by GitHub',
@@ -69,26 +75,28 @@ test.serial.failing('github - repo without description and license', async t => 
 });
 
 test.serial.failing('github - missing topic awesome-list', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
-
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.resolves({
-			body: {
-				description: 'Awesome lint',
-				topics: ['awesome'],
-				license: {
-					key: 'mit',
-				},
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
 			},
-		});
+		},
+		got: {
+			get: async () => ({
+				body: {
+					description: 'Awesome lint',
+					topics: ['awesome'],
+					license: {
+						key: 'mit',
+					},
+				},
+			}),
+		},
+	});
 
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -99,26 +107,28 @@ test.serial.failing('github - missing topic awesome-list', async t => {
 });
 
 test.serial.failing('github - missing topic awesome', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
-
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.resolves({
-			body: {
-				description: 'Awesome lint',
-				topics: ['awesome-list'],
-				license: {
-					key: 'mit',
-				},
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
 			},
-		});
+		},
+		got: {
+			get: async () => ({
+				body: {
+					description: 'Awesome lint',
+					topics: ['awesome-list'],
+					license: {
+						key: 'mit',
+					},
+				},
+			}),
+		},
+	});
 
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -128,14 +138,18 @@ test.serial.failing('github - missing topic awesome', async t => {
 	]);
 });
 
-test.serial.failing('github - remote origin is an GitLab repo', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
+test.serial.failing('github - remote origin is a GitLab repo', async t => {
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'https://gitlab.com/sindresorhus/awesome-lint-test.git';
+				}
+			},
+		},
+	});
 
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('https://gitlab.com/sindresorhus/awesome-lint-test.git');
-
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -146,20 +160,22 @@ test.serial.failing('github - remote origin is an GitLab repo', async t => {
 });
 
 test.serial.failing('github - invalid token', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
+			},
+		},
+		got: {
+			get: async () => {
+				throw { statusCode: 401 };
+			},
+		},
+	});
 
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.rejects({
-			statusCode: 401,
-		});
-
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -170,25 +186,29 @@ test.serial.failing('github - invalid token', async t => {
 });
 
 test.serial.failing('github - API rate limit exceeded with token', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
-	// eslint-disable-next-line camelcase
 	process.env.github_token = 'abcd';
 
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.rejects({
-			statusCode: 403,
-			headers: {
-				'x-ratelimit-limit': 5000,
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
 			},
-		});
+		},
+		got: {
+			get: async () => {
+				throw {
+					statusCode: 403,
+					headers: {
+						'x-ratelimit-limit': 5000,
+					},
+				};
+			},
+		},
+	});
 
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -201,23 +221,27 @@ test.serial.failing('github - API rate limit exceeded with token', async t => {
 });
 
 test.serial.failing('github - API rate limit exceeded without token', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
-
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.rejects({
-			statusCode: 403,
-			headers: {
-				'x-ratelimit-limit': 60,
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
 			},
-		});
+		},
+		got: {
+			get: async () => {
+				throw {
+					statusCode: 403,
+					headers: {
+						'x-ratelimit-limit': 60,
+					},
+				};
+			},
+		},
+	});
 
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
@@ -228,21 +252,25 @@ test.serial.failing('github - API rate limit exceeded without token', async t =>
 });
 
 test.serial.failing('github - API offline', async t => {
-	const execaStub = sandbox.stub(github.execa, 'stdout');
-	const gotStub = sandbox.stub(github.got, 'get');
+	const githubMock = await esmock('../../rules/github.js', {
+		execa: {
+			stdout: async (cmd, args) => {
+				if (cmd === 'git' && args[0] === 'remote') {
+					return 'git@github.com:sindresorhus/awesome-lint-test.git';
+				}
+			},
+		},
+		got: {
+			get: async () => {
+				throw {
+					message: 'getaddrinfo ENOTFOUND api.github.com api.github.com:443',
+					code: 'ENOTFOUND',
+				};
+			},
+		},
+	});
 
-	execaStub
-		.withArgs('git', ['remote', 'get-url', '--push', 'origin'])
-		.returns('git@github.com:sindresorhus/awesome-lint-test.git');
-
-	gotStub
-		.withArgs('https://api.github.com/repos/sindresorhus/awesome-lint-test')
-		.rejects({
-			message: 'getaddrinfo ENOTFOUND api.github.com api.github.com:443',
-			code: 'ENOTFOUND',
-		});
-
-	const messages = await lint({config, filename: 'test/fixtures/github/0.md'});
+	const messages = await lint({ config, filename: 'test/fixtures/github/0.md' });
 	t.deepEqual(messages, [
 		{
 			line: null,
